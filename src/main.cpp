@@ -32,22 +32,32 @@ static duk_ret_t native_fetch(duk_context *ctx)
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
 
   res = curl_easy_perform(curl);
+  int ret = 1;
 
   if (res != CURLE_OK)
   {
     fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+    ret = 0;
     goto error;
   }
 
   duk_push_string(ctx, buffer.c_str());
 
-  curl_easy_cleanup(curl);
-
-  return 1;
-
 error:
-  return 0;
+  curl_easy_cleanup(curl);
+  return ret;
 }
+
+/*
+var req = new XMLHttpRequest();
+req.responseType = 'json';
+req.open('GET', url, true);
+req.onload  = function() {
+   var jsonResponse = req.response;
+   // do something with jsonResponse
+};
+req.send(null);
+*/
 
 int main()
 {
@@ -61,44 +71,12 @@ int main()
 
   duk_push_c_function(ctx, native_fetch, DUK_VARARGS);
   duk_put_global_string(ctx, "fetch");
-  duk_eval_string_noresult(ctx, "print(fetch('https://httpbin.org/get'));");
+  // duk_eval_string_noresult(ctx, "print(fetch('https://httpbin.org/get'));");
+  duk_eval_string_noresult(ctx, "[1, 2, 3].map(function(e) { print(e) });");
 
   duk_destroy_heap(ctx);
 
   curl_global_cleanup();
 
-  /*
-duk_context *ctx = duk_create_heap_default();
-duk_eval_string(ctx, "1+2");
-printf("1+2=%d\n", (int)duk_get_int(ctx, -1));
-duk_destroy_heap(ctx);
-
-CURL *curl;
-CURLcode res;
-
-curl_global_init(CURL_GLOBAL_DEFAULT);
-
-curl = curl_easy_init();
-
-if (curl == NULL)
-{
-  fprintf(stderr, "curl_easy_init() failed\n");
-  return 1;
-}
-
-curl_easy_setopt(curl, CURLOPT_URL, "https://httpbin.org/get");
-
-FILE *file = fopen("httpbin.get", "wb");
-curl_easy_setopt(curl, CURLOPT_WRITEDATA, file);
-
-res = curl_easy_perform(curl);
-
-if (res != CURLE_OK)
-  fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-
-curl_easy_cleanup(curl);
-
-curl_global_cleanup();
-*/
   return 0;
 }
