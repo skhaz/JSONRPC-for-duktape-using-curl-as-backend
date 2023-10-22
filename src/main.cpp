@@ -57,7 +57,7 @@ int main()
 
   duk_push_c_function(ctx, native_print, 1 /*nargs*/);
   duk_put_global_string(ctx, "print");
-  duk_eval_string_noresult(ctx, "print('hello world');");
+  // duk_eval_string_noresult(ctx, "print('hello world');");
 
   duk_push_c_function(ctx, native_fetch, DUK_VARARGS);
   duk_put_global_string(ctx, "fetch");
