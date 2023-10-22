@@ -24,6 +24,7 @@ static duk_ret_t native_fetch(duk_context *ctx)
   CURL *curl;
   CURLcode res;
   std::string buffer;
+  int ret = 1;
 
   curl = curl_easy_init();
 
@@ -32,7 +33,6 @@ static duk_ret_t native_fetch(duk_context *ctx)
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buffer);
 
   res = curl_easy_perform(curl);
-  int ret = 1;
 
   if (res != CURLE_OK)
   {
@@ -67,12 +67,10 @@ int main()
 
   duk_push_c_function(ctx, native_print, 1 /*nargs*/);
   duk_put_global_string(ctx, "print");
-  // duk_eval_string_noresult(ctx, "print('hello world');");
 
   duk_push_c_function(ctx, native_fetch, DUK_VARARGS);
   duk_put_global_string(ctx, "fetch");
-  // duk_eval_string_noresult(ctx, "print(fetch('https://httpbin.org/get'));");
-  duk_eval_string_noresult(ctx, "[1, 2, 3].map(function(e) { print(e) });");
+  duk_eval_string_noresult(ctx, "print(fetch('https://httpbin.org/get'));");
 
   duk_destroy_heap(ctx);
 
