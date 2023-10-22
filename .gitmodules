@@ -1,0 +1,6 @@
+[submodule "vendor/curl"]
+	path = vendor/curl
+	url = git@github.com:curl/curl.git
+[submodule "vendor/quickjs/git"]
+	path = vendor/quickjs/git
+	url = git@github.com:bellard/quickjs.git
