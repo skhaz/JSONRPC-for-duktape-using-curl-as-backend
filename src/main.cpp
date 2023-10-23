@@ -1,11 +1,16 @@
-#include <mimalloc-new-delete.h>
-#include <mimalloc-override.h>
+// #include <mimalloc-new-delete.h>
+// #include <mimalloc-override.h>
 
 #include <curl/curl.h>
 #include <duktape.h>
 #include <stdio.h>
 
+#include <iostream>
 #include <string>
+
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 static void _panic(void *udata, const char *msg) {
   (void)udata;
@@ -57,11 +62,48 @@ error:
 }
 
 static duk_ret_t _native_call(duk_context *ctx) {
+  json request, params;
 
-  duk_push_string(ctx, strdup("hello world"));
+  const duk_idx_t argc = duk_get_top(ctx);
+  for (duk_idx_t i = 1; i < argc; i++) {
+    duk_int_t arg_type = duk_get_type(ctx, i);
+
+    switch (arg_type) {
+    case DUK_TYPE_BOOLEAN:
+      params.emplace_back(duk_get_boolean(ctx, i));
+      break;
+    case DUK_TYPE_NUMBER:
+      params.emplace_back(duk_get_number(ctx, i));
+      break;
+    case DUK_TYPE_STRING:
+      params.emplace_back(duk_get_string(ctx, i));
+      break;
+    case DUK_TYPE_NULL:
+      params.emplace_back(nullptr);
+      break;
+    }
+  }
+
+  request["method"] = duk_get_string(ctx, 0);
+  request["params"] = params.empty() ? json::array() : params;
+  request["id"] = 1;
+
+  std::string request_string = request.dump();
+  std::cout << "JSONRPC: " << request_string << std::endl;
+
+  duk_push_string(ctx, strdup("1"));
 
   return 1;
+
+fail:
+  return 0;
 }
+
+/*
+--> { "method": "echo", "params": ["Hello JSON-RPC"], "id":
+1}
+<-- { "result": "Hello JSON-RPC", "error": null, "id": 1}
+*/
 
 int main() {
   curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -76,7 +118,9 @@ int main() {
   duk_put_prop_string(ctx, -2, "call");
   duk_put_global_string(ctx, "JSONRPC");
 
-  duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.call({result: true})) } catch(e) { print('Error: ' + e) }");
+  duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.call('SetData', 'my-data', null)) } catch(e) { print('Error: ' + e) }");
+
+  duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.call('SetData')) } catch(e) { print('Error: ' + e) }");
 
   duk_destroy_heap(ctx);
 
