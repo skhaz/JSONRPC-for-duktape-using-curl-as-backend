@@ -63,6 +63,7 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
     }
   }
 
+  request["jsonrpc"] = "2.0";
   request["method"] = method;
   request["params"] = params;
   request["id"] = id;
@@ -77,7 +78,7 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
 
   const auto payload = request.dump();
 
-  curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:9000/rpc");
+  curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8000");
   curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -111,7 +112,7 @@ int main() {
   duk_put_prop_string(ctx, -2, "call");
   duk_put_global_string(ctx, "JSONRPC");
 
-  duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.call('Greet', 3, 9)) } catch(e) { print('Error: ' + e) }");
+  duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.call('calculator_add', 3, 9)) } catch(e) { print('Error: ' + e) }");
 
   // duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.call('SetData')) } catch(e) { print('Error: ' + e) }");
 

@@ -14,15 +14,19 @@ const port = 8080
 
 type CalculatorService struct{}
 
-func (s *CalculatorService) Add(a, b int) int {
+func (s *CalculatorService) Add(a, b float64) float64 {
 	return a + b
 }
 
-func (s *CalculatorService) Div(a, b int) (int, error) {
+func (s *CalculatorService) Div(a, b float64) (float64, error) {
 	if b == 0 {
 		return 0, errors.New("divide by zero")
 	}
 	return a / b, nil
+}
+
+func (s *CalculatorService) Greet() string {
+	return "Hello"
 }
 
 func (s *CalculatorService) Version() (string, error) {
