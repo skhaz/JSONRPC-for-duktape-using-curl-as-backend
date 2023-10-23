@@ -62,7 +62,7 @@ error:
 }
 
 static duk_ret_t _native_call(duk_context *ctx) {
-  json request, params;
+  json request, params = json::array();
 
   const duk_idx_t argc = duk_get_top(ctx);
   for (duk_idx_t i = 1; i < argc; i++) {
@@ -85,8 +85,8 @@ static duk_ret_t _native_call(duk_context *ctx) {
   }
 
   request["method"] = duk_get_string(ctx, 0);
-  request["params"] = params.empty() ? json::array() : params;
-  request["id"] = 1;
+  request["params"] = params // .empty() ? json::array() : params;
+      request["id"] = 1;
 
   std::string request_string = request.dump();
   std::cout << "JSONRPC: " << request_string << std::endl;
