@@ -83,17 +83,14 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &stream);
-  curl_easy_setopt(
-      curl, CURLOPT_WRITEFUNCTION, +[](void *buffer, size_t size, size_t count, std::string *stream) -> size_t {
-        auto s_size = size * count;
-        stream->append((char *)buffer, 0, s_size);
-        return s_size;
-      });
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _writefunction);
 
   curl_easy_perform(curl);
   curl_easy_cleanup(curl);
   curl_slist_free_all(headers);
 
+  const auto response = json::parse(stream);
+  // TODO parse result object or error object
   duk_push_string(ctx, stream.c_str());
 
   return 1;
@@ -109,12 +106,12 @@ int main() {
 
   duk_push_object(ctx);
   duk_push_c_function(ctx, _native_jsonrpc, DUK_VARARGS);
-  duk_put_prop_string(ctx, -2, "call");
+  duk_put_prop_string(ctx, -2, "invoke");
   duk_put_global_string(ctx, "JSONRPC");
 
-  duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.call('calculator_add', 3, 9)) } catch(e) { print('Error: ' + e) }");
+  duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.invoke('calculator.add', 3, 9)) } catch(e) { print('Error: ' + e) }");
 
-  // duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.call('SetData')) } catch(e) { print('Error: ' + e) }");
+  // duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.invoke('SetData')) } catch(e) { print('Error: ' + e) }");
 
   duk_destroy_heap(ctx);
 
