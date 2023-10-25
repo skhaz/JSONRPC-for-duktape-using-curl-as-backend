@@ -8,14 +8,14 @@
 
 using json = nlohmann::json;
 
-class JsonSax : public nlohmann::json_sax<nlohmann::json> {
+class UnmarshalSax : public nlohmann::json_sax<nlohmann::json> {
 private:
   duk_context *ctx;
 
 public:
-  JsonSax(duk_context *ctx) : ctx(ctx){};
+  UnmarshalSax(duk_context *ctx) : ctx(ctx){};
 
-  virtual ~JsonSax() = default;
+  virtual ~UnmarshalSax() = default;
 
   virtual bool null() override {
     duk_push_null(ctx);
@@ -80,6 +80,7 @@ public:
   }
 
   virtual bool start_array(std::size_t elements) override {
+    std::cout << "start_array" << std::endl;
     return true;
   }
 
@@ -91,6 +92,88 @@ public:
     return false;
   }
 };
+
+/*
+#define DUK_TYPE_NONE
+#define DUK_TYPE_UNDEFINED 1U
+#define DUK_TYPE_NULL 2U
+#define DUK_TYPE_BOOLEAN 3U
+#define DUK_TYPE_NUMBER 4U
+#define DUK_TYPE_STRING 5U
+#define DUK_TYPE_OBJECT 6U
+
+*/
+static void marshal(duk_context *ctx, json &p) {
+  duk_require_stack(ctx, 4);
+
+  const auto type = duk_get_type(ctx, -1);
+  const auto key = duk_get_string(ctx, -2);
+  switch (type) {
+  case DUK_TYPE_NULL:
+    p.emplace_back(nullptr);
+    break;
+  case DUK_TYPE_BOOLEAN:
+    p.emplace_back(duk_get_boolean(ctx, -1));
+    break;
+  case DUK_TYPE_NUMBER:
+    p.emplace_back(duk_get_number(ctx, -1));
+    break;
+  case DUK_TYPE_STRING:
+    p.emplace_back(duk_get_string(ctx, -1));
+    break;
+  case DUK_TYPE_OBJECT:
+    if (duk_is_array(ctx, -1)) {
+      const auto length = duk_get_length(ctx, -1);
+      auto arr = json::array();
+      for (auto j = 0; j < length; j++) {
+        duk_get_prop_index(ctx, -1, j);
+        arr.emplace_back(duk_get_number(ctx, -1));
+      }
+
+      p[key] = arr;
+    } else {
+      json object;
+      marshal(ctx, object);
+      p[key] = object;
+    }
+    break;
+  }
+}
+
+/*
+const auto argc = duk_get_top(ctx);
+for (auto i = 1; i < argc; i++) {
+  const auto type = duk_get_type(ctx, i);
+
+  switch (type) {
+  case DUK_TYPE_BOOLEAN:
+    params.emplace_back(duk_get_boolean(ctx, i));
+    break;
+  case DUK_TYPE_NUMBER:
+    params.emplace_back(duk_get_number(ctx, i));
+    break;
+  case DUK_TYPE_STRING:
+    params.emplace_back(duk_get_string(ctx, i));
+    break;
+  case DUK_TYPE_NULL:
+    params.emplace_back(nullptr);
+    break;
+  case DUK_TYPE_OBJECT:
+    if (duk_is_array(ctx, i)) {
+      const auto length = duk_get_length(ctx, i);
+      auto arr = json::array();
+
+      for (auto j = 0; j < length; j++) {
+        duk_get_prop_index(ctx, i, j);
+        arr.emplace_back(duk_get_number(ctx, -1));
+        duk_pop(ctx);
+      }
+
+      params.emplace_back(arr);
+      break;
+    }
+  }
+}*/
 
 static void
 _panic(void *udata, const char *message) {
@@ -118,25 +201,7 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
 
   const auto id = nullptr;
   const auto method = duk_get_string(ctx, 0);
-  const auto argc = duk_get_top(ctx);
-  for (auto i = 1; i < argc; i++) {
-    const auto type = duk_get_type(ctx, i);
-
-    switch (type) {
-    case DUK_TYPE_BOOLEAN:
-      params.emplace_back(duk_get_boolean(ctx, i));
-      break;
-    case DUK_TYPE_NUMBER:
-      params.emplace_back(duk_get_number(ctx, i));
-      break;
-    case DUK_TYPE_STRING:
-      params.emplace_back(duk_get_string(ctx, i));
-      break;
-    case DUK_TYPE_NULL:
-      params.emplace_back(nullptr);
-      break;
-    }
-  }
+  marshal(ctx, params);
 
   request["jsonrpc"] = "2.0";
   request["method"] = method;
@@ -153,7 +218,10 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
 
   const auto payload = request.dump();
 
+  std::cout << "Payload: " << payload << std::endl;
+
   curl_easy_setopt(curl, CURLOPT_URL, "https://rpc.carimbo.cloud/");
+  curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -164,7 +232,7 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
   curl_easy_cleanup(curl);
   curl_slist_free_all(headers);
 
-  JsonSax handler(ctx);
+  UnmarshalSax handler(ctx);
 
   return json::sax_parse(stream, &handler) ? 1 : 0;
 }
@@ -184,9 +252,9 @@ int main() {
 
   const auto script = R"(
     try {
-      print(JSON.stringify(JSONRPC.invoke('arith_add', 3, 5)))
-    } catch (e) {
-      print(e)
+      print(JSON.stringify(JSONRPC.invoke('arith_scalar', [1, 2, 3], 2)))
+    } catch (error) {
+      print('Error: ' + error)
     }
   )";
 
