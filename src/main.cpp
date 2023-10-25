@@ -1,6 +1,3 @@
-// #include <mimalloc-new-delete.h>
-// #include <mimalloc-override.h>
-
 #include <curl/curl.h>
 #include <duktape.h>
 #include <stdio.h>
@@ -11,6 +8,90 @@
 
 using json = nlohmann::json;
 
+class JsonSax : public nlohmann::json_sax<nlohmann::json> {
+private:
+  duk_context *ctx;
+
+public:
+  JsonSax(duk_context *ctx) : ctx(ctx){};
+
+  virtual ~JsonSax() = default;
+
+  virtual bool null() override {
+    duk_push_null(ctx);
+    duk_put_prop(ctx, -3);
+
+    return true;
+  }
+
+  virtual bool boolean(bool val) override {
+    duk_push_boolean(ctx, val);
+    duk_put_prop(ctx, -3);
+
+    return true;
+  }
+
+  virtual bool number_integer(number_integer_t val) override {
+    duk_push_number(ctx, val);
+    duk_put_prop(ctx, -3);
+
+    return true;
+  }
+
+  virtual bool number_unsigned(number_unsigned_t val) override {
+    duk_push_number(ctx, val);
+    duk_put_prop(ctx, -3);
+
+    return true;
+  }
+
+  virtual bool number_float(number_float_t val, const string_t &s) override {
+    duk_push_number(ctx, val);
+    duk_put_prop(ctx, -3);
+
+    return true;
+  }
+
+  virtual bool string(string_t &val) override {
+    duk_push_string(ctx, val.c_str());
+    duk_put_prop(ctx, -3);
+
+    return true;
+  }
+
+  virtual bool binary(binary_t &val) override {
+    return true;
+  }
+
+  virtual bool start_object(std::size_t elements) override {
+    duk_push_object(ctx);
+
+    return true;
+  }
+
+  virtual bool key(string_t &val) override {
+    duk_push_string(ctx, val.c_str());
+
+    return true;
+  }
+
+  virtual bool end_object() override {
+    return true;
+  }
+
+  virtual bool start_array(std::size_t elements) override {
+    return true;
+  }
+
+  virtual bool end_array() override {
+    return true;
+  }
+
+  virtual bool parse_error(std::size_t position, const std::string &last_token, const nlohmann::detail::exception &ex) override {
+    return false;
+  }
+};
+
 static void
 _panic(void *udata, const char *message) {
   (void)udata;
@@ -19,12 +100,6 @@ _panic(void *udata, const char *message) {
   fflush(stderr);
   abort();
 }
-
-// size_t writefunc(void *ptr, size_t size, size_t nmemb, std::string *buffer)
-// {
-//   buffer->append(static_cast<char *>(ptr), size * nmemb);
-//   return size * nmemb;
-// }
 
 static duk_ret_t _native_print(duk_context *ctx) {
   printf("%s\n", duk_to_string(ctx, 0));
@@ -78,8 +153,8 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
 
   const auto payload = request.dump();
 
-  curl_easy_setopt(curl, CURLOPT_URL, "http://localhost:8000");
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(curl, CURLOPT_URL, "https://rpc.carimbo.cloud/");
+  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &stream);
@@ -89,11 +164,9 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
   curl_easy_cleanup(curl);
   curl_slist_free_all(headers);
 
-  const auto response = json::parse(stream);
-  // TODO parse result object or error object
-  duk_push_string(ctx, stream.c_str());
+  JsonSax handler(ctx);
 
-  return 1;
+  return json::sax_parse(stream, &handler) ? 1 : 0;
 }
 
 int main() {
@@ -109,13 +182,17 @@ int main() {
   duk_put_prop_string(ctx, -2, "invoke");
   duk_put_global_string(ctx, "JSONRPC");
 
-  duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.invoke('calculator.add', 3, 9)) } catch(e) { print('Error: ' + e) }");
+  const auto script = R"(
+    try {
+      print(JSON.stringify(JSONRPC.invoke('arith_add', 3, 5)))
+    } catch (e) {
+      print(e)
+    }
+  )";
 
-  // duk_eval_string_noresult(ctx, "try { print('JSONRPC: ' + JSONRPC.invoke('SetData')) } catch(e) { print('Error: ' + e) }");
+  duk_eval_string_noresult(ctx, script);
 
   duk_destroy_heap(ctx);
-
   curl_global_cleanup();
-
   return 0;
 }
