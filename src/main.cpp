@@ -8,6 +8,43 @@
 
 using json = nlohmann::json;
 
+static void marshal(duk_context *ctx, json &p) {
+  duk_require_stack(ctx, 4);
+
+  const auto type = duk_get_type(ctx, -1);
+  const auto key = duk_get_string(ctx, -2);
+  switch (type) {
+  case DUK_TYPE_NULL:
+    p.emplace_back(nullptr);
+    break;
+  case DUK_TYPE_BOOLEAN:
+    p.emplace_back(duk_get_boolean(ctx, -1));
+    break;
+  case DUK_TYPE_NUMBER:
+    p.emplace_back(duk_get_number(ctx, -1));
+    break;
+  case DUK_TYPE_STRING:
+    p.emplace_back(duk_get_string(ctx, -1));
+    break;
+  case DUK_TYPE_OBJECT:
+    // if (duk_is_array(ctx, -1)) {
+    //   const auto length = duk_get_length(ctx, -1);
+    //   auto arr = json::array();
+    //   for (auto j = 0; j < length; j++) {
+    //     duk_get_prop_index(ctx, -1, j);
+    //     arr.emplace_back(duk_get_number(ctx, -1));
+    //   }
+
+    //   p[key] = arr;
+    // } else {
+    //   json object;
+    //   marshal(ctx, object);
+    //   p[key] = object;
+    // }
+    break;
+  }
+}
+
 class UnmarshalSax : public nlohmann::json_sax<nlohmann::json> {
 private:
   duk_context *ctx;
@@ -93,88 +130,6 @@ public:
   }
 };
 
-/*
-#define DUK_TYPE_NONE
-#define DUK_TYPE_UNDEFINED 1U
-#define DUK_TYPE_NULL 2U
-#define DUK_TYPE_BOOLEAN 3U
-#define DUK_TYPE_NUMBER 4U
-#define DUK_TYPE_STRING 5U
-#define DUK_TYPE_OBJECT 6U
-
-*/
-static void marshal(duk_context *ctx, json &p) {
-  duk_require_stack(ctx, 4);
-
-  const auto type = duk_get_type(ctx, -1);
-  const auto key = duk_get_string(ctx, -2);
-  switch (type) {
-  case DUK_TYPE_NULL:
-    p.emplace_back(nullptr);
-    break;
-  case DUK_TYPE_BOOLEAN:
-    p.emplace_back(duk_get_boolean(ctx, -1));
-    break;
-  case DUK_TYPE_NUMBER:
-    p.emplace_back(duk_get_number(ctx, -1));
-    break;
-  case DUK_TYPE_STRING:
-    p.emplace_back(duk_get_string(ctx, -1));
-    break;
-  case DUK_TYPE_OBJECT:
-    if (duk_is_array(ctx, -1)) {
-      const auto length = duk_get_length(ctx, -1);
-      auto arr = json::array();
-      for (auto j = 0; j < length; j++) {
-        duk_get_prop_index(ctx, -1, j);
-        arr.emplace_back(duk_get_number(ctx, -1));
-      }
-
-      p[key] = arr;
-    } else {
-      json object;
-      marshal(ctx, object);
-      p[key] = object;
-    }
-    break;
-  }
-}
-
-/*
-const auto argc = duk_get_top(ctx);
-for (auto i = 1; i < argc; i++) {
-  const auto type = duk_get_type(ctx, i);
-
-  switch (type) {
-  case DUK_TYPE_BOOLEAN:
-    params.emplace_back(duk_get_boolean(ctx, i));
-    break;
-  case DUK_TYPE_NUMBER:
-    params.emplace_back(duk_get_number(ctx, i));
-    break;
-  case DUK_TYPE_STRING:
-    params.emplace_back(duk_get_string(ctx, i));
-    break;
-  case DUK_TYPE_NULL:
-    params.emplace_back(nullptr);
-    break;
-  case DUK_TYPE_OBJECT:
-    if (duk_is_array(ctx, i)) {
-      const auto length = duk_get_length(ctx, i);
-      auto arr = json::array();
-
-      for (auto j = 0; j < length; j++) {
-        duk_get_prop_index(ctx, i, j);
-        arr.emplace_back(duk_get_number(ctx, -1));
-        duk_pop(ctx);
-      }
-
-      params.emplace_back(arr);
-      break;
-    }
-  }
-}*/
-
 static void
 _panic(void *udata, const char *message) {
   (void)udata;
@@ -252,7 +207,7 @@ int main() {
 
   const auto script = R"(
     try {
-      print(JSON.stringify(JSONRPC.invoke('arith_scalar', [1, 2, 3], 2)))
+      print(JSON.stringify(JSONRPC.invoke('arith_scalar', [1, 2, 3], 2, {ok: true})))
     } catch (error) {
       print('Error: ' + error)
     }
