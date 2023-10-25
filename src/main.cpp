@@ -232,9 +232,9 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
   curl_easy_cleanup(curl);
   curl_slist_free_all(headers);
 
-  UnmarshalSax handler(ctx);
+  UnmarshalSax sax(ctx);
 
-  return json::sax_parse(stream, &handler) ? 1 : 0;
+  return json::sax_parse(stream, &sax) ? 1 : 0;
 }
 
 int main() {
