@@ -8,39 +8,56 @@
 
 using json = nlohmann::json;
 
-static void marshal(duk_context *ctx, json &p) {
+static void marshal(duk_context *ctx, json &p, duk_idx_t idx = -1) {
   duk_require_stack(ctx, 4);
 
-  const auto type = duk_get_type(ctx, -1);
-  const auto key = duk_get_string(ctx, -2);
+  const auto type = duk_get_type(ctx, idx);
+  const auto key = duk_get_string(ctx, idx);
   switch (type) {
   case DUK_TYPE_NULL:
-    p.emplace_back(nullptr);
+    p = nullptr;
     break;
   case DUK_TYPE_BOOLEAN:
-    p.emplace_back(duk_get_boolean(ctx, -1));
+    p = static_cast<bool>(duk_get_boolean(ctx, idx));
     break;
   case DUK_TYPE_NUMBER:
-    p.emplace_back(duk_get_number(ctx, -1));
+    p = static_cast<double>(duk_get_number(ctx, idx));
     break;
   case DUK_TYPE_STRING:
-    p.emplace_back(duk_get_string(ctx, -1));
+    p = static_cast<const char *>(duk_get_string(ctx, idx));
     break;
   case DUK_TYPE_OBJECT:
-    // if (duk_is_array(ctx, -1)) {
-    //   const auto length = duk_get_length(ctx, -1);
-    //   auto arr = json::array();
-    //   for (auto j = 0; j < length; j++) {
-    //     duk_get_prop_index(ctx, -1, j);
-    //     arr.emplace_back(duk_get_number(ctx, -1));
-    //   }
+    if (duk_is_array(ctx, idx)) {
+      const auto lenght = duk_get_length(ctx, idx);
 
-    //   p[key] = arr;
-    // } else {
-    //   json object;
-    //   marshal(ctx, object);
-    //   p[key] = object;
-    // }
+      for (duk_uarridx_t i = 0; i < lenght; i++) {
+        json element;
+        duk_get_prop_index(ctx, idx, static_cast<duk_uarridx_t>(i));
+        marshal(ctx, element, idx + 1);
+        p.push_back(element);
+        duk_pop(ctx);
+      }
+    } else if (duk_is_object(ctx, idx)) {
+      // duk_enum(ctx, idx, DUK_ENUM_OWN_PROPERTIES_ONLY);
+      duk_pop(ctx);
+      // const auto lenght = duk_get_length(ctx, idx);
+      // std::cout << "lenght: " << lenght << std::endl;
+      // for (duk_uarridx_t i = 0; i < lenght; i++) {
+      //   std::cout << "loop" << std::endl;
+      //   duk_pop(ctx);
+      // }
+      // std::cout << "enum" << std::endl;
+      // while (duk_next(ctx, idx, true)) {
+      //   std::cout << "loop" << std::endl;
+      //   json key, value;
+
+      //   duk_insert(ctx, idx - 2);
+      //   marshal(ctx, key, idx);
+      //   marshal(ctx, value, idx);
+      //   p[key] = value;
+      //   duk_pop_2(ctx);
+      // }
+    }
     break;
   }
 }
@@ -69,14 +86,14 @@ public:
   }
 
   virtual bool number_integer(number_integer_t val) override {
-    duk_push_number(ctx, val);
+    duk_push_int(ctx, val);
     duk_put_prop(ctx, -3);
 
     return true;
   }
 
   virtual bool number_unsigned(number_unsigned_t val) override {
-    duk_push_number(ctx, val);
+    duk_push_uint(ctx, val);
     duk_put_prop(ctx, -3);
 
     return true;
@@ -107,6 +124,7 @@ public:
   }
 
   virtual bool key(string_t &val) override {
+    std::cout << "key: " << val << std::endl;
     duk_push_string(ctx, val.c_str());
 
     return true;
@@ -117,7 +135,7 @@ public:
   }
 
   virtual bool start_array(std::size_t elements) override {
-    std::cout << "start_array" << std::endl;
+    duk_push_array(ctx);
     return true;
   }
 
@@ -156,7 +174,12 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
 
   const auto id = nullptr;
   const auto method = duk_get_string(ctx, 0);
-  marshal(ctx, params);
+  const auto argc = duk_get_top(ctx);
+  for (auto i = 1; i < argc; i++) {
+    json p;
+    marshal(ctx, p, i);
+    params.emplace_back(p);
+  }
 
   request["jsonrpc"] = "2.0";
   request["method"] = method;
@@ -176,7 +199,7 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
   std::cout << "Payload: " << payload << std::endl;
 
   curl_easy_setopt(curl, CURLOPT_URL, "https://rpc.carimbo.cloud/");
-  curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+  curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
   curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -186,6 +209,8 @@ static duk_ret_t _native_jsonrpc(duk_context *ctx) {
   curl_easy_perform(curl);
   curl_easy_cleanup(curl);
   curl_slist_free_all(headers);
+
+  std::cout << "Response: " << stream << std::endl;
 
   UnmarshalSax sax(ctx);
 
@@ -207,7 +232,11 @@ int main() {
 
   const auto script = R"(
     try {
-      print(JSON.stringify(JSONRPC.invoke('arith_scalar', [1, 2, 3], 2, {ok: true})))
+      const result = JSONRPC.invoke('arith_add', 1, 2, [1, 2, 3, [4, 5, 6], "string", true, false, null, { "key": "value" }])
+      print('Result ' + JSON.stringify(result))
+
+      //const result = JSONRPC.invoke('helper_sample', [])
+      //print(JSON.stringify(result))
     } catch (error) {
       print('Error: ' + error)
     }
