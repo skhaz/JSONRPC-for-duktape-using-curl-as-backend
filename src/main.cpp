@@ -9,7 +9,7 @@
 using json = nlohmann::json;
 
 static void marshal(duk_context *ctx, json &p, duk_idx_t idx = -1) {
-  duk_require_stack(ctx, 4);
+  duk_require_stack(ctx, 3);
 
   const auto type = duk_get_type(ctx, idx);
   const auto key = duk_get_string(ctx, idx);
@@ -20,9 +20,15 @@ static void marshal(duk_context *ctx, json &p, duk_idx_t idx = -1) {
   case DUK_TYPE_BOOLEAN:
     p = static_cast<bool>(duk_get_boolean(ctx, idx));
     break;
-  case DUK_TYPE_NUMBER:
-    p = static_cast<double>(duk_get_number(ctx, idx));
-    break;
+  case DUK_TYPE_NUMBER: {
+    const auto number = duk_get_number(ctx, idx);
+
+    if (std::floor(number) == std::ceil(number)) {
+      p = static_cast<int64_t>(number);
+    } else {
+      p = static_cast<double>(number);
+    }
+  } break;
   case DUK_TYPE_STRING:
     p = static_cast<const char *>(duk_get_string(ctx, idx));
     break;
@@ -38,26 +44,9 @@ static void marshal(duk_context *ctx, json &p, duk_idx_t idx = -1) {
         duk_pop(ctx);
       }
     } else if (duk_is_object(ctx, idx)) {
-      // duk_enum(ctx, idx, DUK_ENUM_OWN_PROPERTIES_ONLY);
-      duk_pop(ctx);
-      // const auto lenght = duk_get_length(ctx, idx);
-      // std::cout << "lenght: " << lenght << std::endl;
-      // for (duk_uarridx_t i = 0; i < lenght; i++) {
-      //   std::cout << "loop" << std::endl;
-      //   duk_pop(ctx);
-      // }
-      // std::cout << "enum" << std::endl;
-      // while (duk_next(ctx, idx, true)) {
-      //   std::cout << "loop" << std::endl;
-      //   json key, value;
-
-      //   duk_insert(ctx, idx - 2);
-      //   marshal(ctx, key, idx);
-      //   marshal(ctx, value, idx);
-      //   p[key] = value;
-      //   duk_pop_2(ctx);
-      // }
+      // TODO
     }
+
     break;
   }
 }
@@ -232,11 +221,11 @@ int main() {
 
   const auto script = R"(
     try {
-      const result = JSONRPC.invoke('arith_add', 1, 2, [1, 2, 3, [4, 5, 6], "string", true, false, null, { "key": "value" }])
-      print('Result ' + JSON.stringify(result))
+      // const result = JSONRPC.invoke('arith_add', 1.2, 2.1)
+      // print('Result ' + JSON.stringify(result))
 
-      //const result = JSONRPC.invoke('helper_sample', [])
-      //print(JSON.stringify(result))
+      const result = JSONRPC.invoke('helper_sample')
+      print(JSON.stringify(result))
     } catch (error) {
       print('Error: ' + error)
     }
